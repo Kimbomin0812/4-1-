@@ -1,0 +1,843 @@
+from collections import Counter, defaultdict
+from itertools import product
+
+
+# ------------------ [1] 유틸 함수 ------------------ #
+def get_valid_input(prompt, validation_func, error_message): #유효한 사용자입력만 받는 함수.
+    #param prompt: 사용자에게 보여줄 메시지
+    #param validation_func: 입력의 유효성을 검사하는 함수 (True/False 반환)
+    #param error_message: 유효하지 않은 입력일 경우 보여줄 오류 메시지
+    while True:
+        user_input = input(prompt).strip()
+        if validation_func(user_input):
+            return user_input
+        print(f" {error_message}")
+
+
+def get_valid_genotype(prompt, expected_length, allowed_chars=None): #특정 길이의 유전자형을 입력받고 검증
+    #param propt : 사용자에게 보여줄 메세지
+    #param expected_lenght : 기대한는 유전자형 길이
+    #param alloved_chars : 유전자형에 해당되는 문자 집합
+
+    def validate(x):
+        if len(x) != expected_length:
+            return False
+        if allowed_chars:
+            return all(c in allowed_chars for c in x)
+        return all(c.isalpha() or c == "'" for c in x)
+
+    error_message = f"정확히 {expected_length}글자의 "
+    if allowed_chars:
+        error_message += f"정의된 대립유전자 ({', '.join(allowed_chars)})만 사용하세요."
+    else:
+        error_message += "알파벳 또는 ' 만 입력하세요."
+
+    return get_valid_input(
+        prompt,
+        validate,
+        error_message
+    )
+
+
+# ------------------ [2] 표현형 계산기 함수들 ------------------ #
+
+def 완전우성(): #완전우성에 대한 정보를 입력받음
+    alleles = []
+    allele_traits = {}
+    dominant_alleles = []
+    recessive_alleles = []
+
+    print("   완전 우성을 선택했으므로 대립유전자 수는 자동으로 2개로 설정됩니다.")
+
+    # 우성 대립유전자 입력
+    dominant_a = get_valid_input(
+        "  우성 대립유전자 이름 입력 (한 글자, 중복 불가, 예: A): ",
+        lambda x: len(x) == 1 and x.isalpha() and x not in alleles,
+        "한 글자의 알파벳만 입력할 수 있으며, 이미 입력된 대립유전자와 중복될 수 없습니다."
+    )
+    alleles.append(dominant_a)
+    dominant_alleles.append(dominant_a)
+    tname_dominant = get_valid_input(
+        f"    '{dominant_a}'가 나타내는 형질 이름 입력 (예: 파란눈, 비워두면 기본 이름 사용): ",
+        lambda x: True,
+        ""
+    )
+    if not tname_dominant:
+        tname_dominant = f"형질_{dominant_a}"
+    allele_traits[dominant_a] = tname_dominant
+
+    # 열성 대립유전자 입력
+    recessive_a = get_valid_input(
+        "  열성 대립유전자 이름 입력 (한 글자, 중복 불가, 예: a): ",
+        lambda x: len(x) == 1 and x.isalpha() and x not in alleles,
+        "한 글자의 알파벳만 입력할 수 있으며, 이미 입력된 대립유전자와 중복될 수 없습니다."
+    )
+    alleles.append(recessive_a)
+    recessive_alleles.append(recessive_a)
+    tname_recessive = get_valid_input(
+        f"    '{recessive_a}'가 나타내는 형질 이름 입력 (예: 초록눈, 비워두면 기본 이름 사용): ",
+        lambda x: True,
+        ""
+    )
+    if not tname_recessive:
+        tname_recessive = f"형질_{recessive_a}"
+    allele_traits[recessive_a] = tname_recessive
+
+    return {
+        'alleles': alleles,
+        'allele_traits': allele_traits,
+        'dominance_type': 1,  # 완전 우성
+        'dominant_alleles': dominant_alleles,
+        'recessive_alleles': recessive_alleles,
+        'incomplete_dominance_traits': {},
+        'heterozygous_phenotypes': {}  # 공우성과의 일관성을 위해 추가 (여기서는 사용 X)
+    }
+
+
+def 불완전우성(): #불완전우성 형질에 대한 정보 입력
+    alleles = []
+    allele_traits = {}
+    incomplete_dominance_traits = {}
+
+    print("   불완전 우성을 선택했으므로 대립유전자 수는 자동으로 2개로 설정됩니다.")
+
+    # 첫 번째 대립유전자 입력
+    a1 = get_valid_input(
+        "  첫 번째 대립유전자 이름 입력 (한 글자, 중복 불가, 예: R): ",
+        lambda x: len(x) == 1 and x.isalpha() and x not in alleles,
+        "한 글자의 알파벳만 입력할 수 있으며, 이미 입력된 대립유전자와 중복될 수 없습니다."
+    )
+    alleles.append(a1)
+    tname1 = get_valid_input(
+        f"    '{a1}'가 나타내는 형질 이름 입력 (예: 붉은색): ",
+        lambda x: bool(x.strip()),
+        "형질 이름을 입력해주세요."
+    )
+    allele_traits[a1] = tname1
+
+    # 두 번째 대립유전자 입력
+    a2 = get_valid_input(
+        "  두 번째 대립유전자 이름 입력 (한 글자, 중복 불가, 예: W): ",
+        lambda x: len(x) == 1 and x.isalpha() and x not in alleles,
+        "한 글자의 알파벳만 입력할 수 있으며, 이미 입력된 대립유전자와 중복될 수 없습니다."
+    )
+    alleles.append(a2)
+    tname2 = get_valid_input(
+        f"    '{a2}'가 나타내는 형질 이름 입력 (예: 흰색): ",
+        lambda x: bool(x.strip()),
+        "형질 이름을 입력해주세요."
+    )
+    allele_traits[a2] = tname2
+
+    # 이형접합일 때의 형질 입력받기
+    combined_trait = get_valid_input(
+        f"  '{a1}{a2}' 이형접합일 때 나타나는 형질을 입력하세요 (예: 분홍색): ",
+        lambda x: bool(x.strip()),
+        "형질 이름을 입력해주세요."
+    )
+    incomplete_dominance_traits[frozenset(sorted([a1, a2]))] = combined_trait
+
+    return {
+        'alleles': alleles,
+        'allele_traits': allele_traits,
+        'dominance_type': 2,  # 불완전 우성
+        'dominant_alleles': [],
+        'recessive_alleles': [],
+        'incomplete_dominance_traits': incomplete_dominance_traits,
+        'heterozygous_phenotypes': {}  # 공우성과의 일관성을 위해 추가 (여기서는 사용 X)
+    }
+
+
+def 공우성(): #공우성 형질에 대한 입력
+    alleles = []
+    allele_traits = {}
+    heterozygous_phenotypes = {}  # 이형접합 유전자형에 대한 표현형을 저장할 딕셔너리
+
+    while True:
+        try:
+            m = int(get_valid_input(
+                "  대립유전자 수 입력 (예: 2 이상, ABO는 3): ",
+                lambda x: x.isdigit() and int(x) >= 2,
+                "2 이상의 숫자를 입력해주세요."
+            ))
+            break
+        except ValueError:
+            print("숫자를 입력해주세요.")
+
+    # 대립유전자 이름 및 각 대립유전자 단독 표현형 입력
+    print("\n  --- 각 대립유전자가 동형접합일 때의 표현형 입력 ---")
+    for j in range(1, m + 1):
+        a = get_valid_input(
+            f"  대립유전자 {j} 이름 입력 (한 글자, 중복 불가, 예: A, B, O): ",
+            lambda x: len(x) == 1 and x.isalpha() and x.upper() not in [al.upper() for al in alleles],
+            # 대소문자 무시하고 중복 검사
+            "한 글자의 알파벳만 입력할 수 있으며, 이미 입력된 대립유전자와 중복될 수 없습니다."
+        )
+        alleles.append(a)
+
+        tname = get_valid_input(
+            f"    '{a}{a}' 또는 '{a}'가 단독으로 나타내는 형질 이름 입력 (예: A형, B형, O형): ",
+            lambda x: bool(x.strip()),
+            "형질 이름을 입력해주세요."
+        )
+        allele_traits[a] = tname
+
+    # 모든 가능한 이형접합 조합에 대한 표현형 입력
+    print("\n  --- 이형접합 유전자형의 표현형 입력 ---")
+    print("  (예: 'AB' 유전자형에 'AB형' 입력, 'AO' 유전자형에 'A형' 입력)")
+    all_combinations = list(product(alleles, repeat=2))
+    processed_combinations = set()
+
+    for a1, a2 in all_combinations:
+        if a1 == a2:  # 동형접합은 위에서 처리했으므로 건너뛰기
+            continue
+
+        # 중복 조합 처리 (예: AB와 BA는 동일하게 처리)
+        sorted_combination = tuple(sorted([a1, a2]))
+        if sorted_combination in processed_combinations:
+            continue
+        processed_combinations.add(sorted_combination)
+
+        # 이형접합 조합의 표현형 입력받기
+        # 예: 'A', 'B' 대립유전자의 경우, 'AB' 조합에 대한 표현형을 물음.
+        # 이때, 사용자가 'A형'이라고 입력하면 A가 B에 대해 완전 우성임을 나타냄.
+        # 'AB형'이라고 입력하면 A와 B가 공우성임을 나타냄.
+        combo_str = ''.join(sorted([a1, a2]))
+        pheno_input = get_valid_input(
+            f"  유전자형 '{combo_str}'이(가) 나타내는 표현형을 입력하세요 (예: AB형, A형): ",
+            lambda x: bool(x.strip()),
+            "표현형 이름을 입력해주세요."
+        )
+        heterozygous_phenotypes[frozenset(sorted_combination)] = pheno_input
+
+    return {
+        'alleles': alleles,
+        'allele_traits': allele_traits,  # 동형접합 또는 단독 대립유전자 표현형
+        'dominance_type': 3,  # 공우성
+        'dominant_alleles': [],
+        'recessive_alleles': [],
+        'incomplete_dominance_traits': {},  # 불완전 우성과의 일관성을 위해 추가 (여기서는 사용 X)
+        'heterozygous_phenotypes': heterozygous_phenotypes  # 이형접합 표현형
+    }
+
+
+def input_phenotype_info(): #형질 개수, 각 형질별 대립유전자 수, 이름, 완전/불완전/공우성 선택
+    while True:
+        try:
+            n = int(get_valid_input(
+                "▶ 형질 개수를 입력하세요 (예: 2): ",
+                lambda x: x.isdigit() and int(x) >= 1,
+                "1 이상의 숫자를 입력해주세요."
+            ))
+            break
+        except ValueError:
+            print("숫자를 입력해주세요.")
+
+    traits = []
+
+    for i in range(1, n + 1):
+        print(f"\n--- {i}번째 형질 정보 입력 ---")
+
+        dominance_type = int(get_valid_input(
+            "  표현형 유형 선택 (1: 완전우성, 2: 불완전 우성, 3: 공우성/복대립): ",
+            lambda x: x in ['1', '2', '3'],
+            "1, 2, 3 중 하나를 입력해주세요."
+        ))
+
+        if dominance_type == 1:
+            traits.append(완전우성())
+        elif dominance_type == 2:
+            traits.append(불완전우성())
+        else:  # dominance_type == 3 (공우성/복대립)
+            traits.append(공우성())
+
+    return traits
+
+
+def input_parents_phenotypes(traits): #각 형질별로 엄마, 아빠 유전자형 리스트로 반환
+    mom_genes, dad_genes = [], []
+    for idx, trait in enumerate(traits, start=1): #대소무자 구별해야함
+
+        # 유전자형 입력 시 허용되는 대립유전자 목록을 생성 (대소문자 구분 없이 비교하기 위해)
+        allowed_alleles_for_validation = trait['alleles']
+
+        mom_g = get_valid_input(
+            f"▶ 엄마의 {idx}번째 형질 유전자형 입력 (2글자, 예: Aa 또는 AA): ",
+            lambda x: len(x) == 2 and x[0] in allowed_alleles_for_validation and x[1] in allowed_alleles_for_validation,
+            f"정확히 2글자의 알파벳으로 입력하고, 정의된 대립유전자 ({', '.join(allowed_alleles_for_validation)})만 사용하세요."
+        )
+        dad_g = get_valid_input(
+            f"▶ 아빠의 {idx}번째 형질 유전자형 입력 (2글자, 예: Aa 또는 aa): ",
+            lambda x: len(x) == 2 and x[0] in allowed_alleles_for_validation and x[1] in allowed_alleles_for_validation,
+            f"정확히 2글자의 알파벳으로 입력하고, 정의된 대립유전자 ({', '.join(allowed_alleles_for_validation)})만 사용하세요."
+        )
+        mom_genes.append(mom_g)
+        dad_genes.append(dad_g)
+    return mom_genes, dad_genes
+
+
+def get_phenotype_complete_dominance(geno_pair, trait): # 완전 우성에서 표현형 반환
+    a1, a2 = sorted(list(geno_pair))
+    allele_traits = trait['allele_traits']
+    dominant_alleles = trait['dominant_alleles']
+    recessive_alleles = trait['recessive_alleles']
+
+    for dominant_a in dominant_alleles:
+        if dominant_a == a1 or dominant_a == a2:
+            return allele_traits.get(dominant_a)
+
+    if a1 == a2 and a1 in recessive_alleles:
+        return allele_traits.get(a1)
+
+    return "Unknown Phenotype (Complete Dominance)"
+
+
+def get_phenotype_incomplete_dominance(geno_pair, trait): #불완전 우성에서 표현형 반환
+    a1, a2 = sorted(list(geno_pair))
+    allele_traits = trait['allele_traits']
+    incomplete_dominance_traits = trait['incomplete_dominance_traits']
+
+    if a1 == a2:  # 동형접합
+        return allele_traits.get(a1)
+    else:  # 이형접합
+        combined_key = frozenset([a1, a2])
+        return incomplete_dominance_traits.get(combined_key)
+
+def get_phenotype_codominance(geno_pair, trait): #공우성에서 표현형 반환.
+    a1, a2 = sorted(list(geno_pair))  # 유전자형을 정렬하여 키로 사용
+    allele_traits = trait['allele_traits']
+    heterozygous_phenotypes = trait['heterozygous_phenotypes']
+
+    if a1 == a2:  # 동형접합 (예: AA, BB, OO)
+        return allele_traits.get(a1)
+    else:  # 이형접합 (예: AB, AO, BO)
+        combined_key = frozenset([a1, a2])
+        # 이형접합 표현형이 정의되어 있다면 반환
+        if combined_key in heterozygous_phenotypes:
+            return heterozygous_phenotypes.get(combined_key)
+        else:  # 정의되어 있지 않다면 개별 형질을 합쳐서 반환 (일반적인 공우성)
+            t1 = allele_traits.get(a1, "")
+            t2 = allele_traits.get(a2, "")
+            if t1 and t2:
+                # 예: "파란눈 + 초록눈"
+                return f"{t1} + {t2}"
+            return "Unknown Co-dominance Heterozygous"
+
+
+def cross_phenotype_prob(mom_alleles, dad_alleles, trait):
+    mom_gametes = [mom_alleles[0], mom_alleles[1]]
+    dad_gametes = [dad_alleles[0], dad_alleles[1]]
+
+    offspring_genotypes = []
+    for m_gamete in mom_gametes:
+        for d_gamete in dad_gametes:
+            offspring_genotypes.append(''.join(sorted([m_gamete, d_gamete])))
+
+    total_offspring = len(offspring_genotypes)
+    phenotype_counts = Counter()
+    genotype_counts = Counter()
+
+    # 우성 유형에 따라 올바른 표현형 함수 호출
+    if trait['dominance_type'] == 1:
+        get_phenotype_func = get_phenotype_complete_dominance
+    elif trait['dominance_type'] == 2:
+        get_phenotype_func = get_phenotype_incomplete_dominance
+    else:  # trait['dominance_type'] == 3 (공우성/복대립)
+        get_phenotype_func = get_phenotype_codominance
+
+    for geno in offspring_genotypes:
+        pheno = get_phenotype_func(geno, trait)
+        phenotype_counts[pheno] += 1
+        genotype_counts[geno] += 1
+
+    phenotype_probs = {pheno: (count / total_offspring) * 100 for pheno, count in phenotype_counts.items()}
+    genotype_probs = {geno: (count / total_offspring) * 100 for geno, count in genotype_counts.items()}
+
+    return genotype_probs, phenotype_probs
+
+
+def phenotype_main():
+    print("\n--- 표현형 확률 계산기 ---")
+    traits = input_phenotype_info()
+    mom_genes, dad_genes = input_parents_phenotypes(traits)
+
+    print("\n--- 자손 유전자형 및 표현형 확률 (각 형질별) ---")
+    for i, trait in enumerate(traits, start=1):
+        mom_trait_gene = mom_genes[i - 1]
+        dad_trait_gene = dad_genes[i - 1]
+
+        mom_alleles = list(mom_trait_gene)
+        dad_alleles = list(dad_trait_gene)
+
+        genotype_probs, phenotype_probs = cross_phenotype_prob(mom_alleles, dad_alleles, trait)
+
+        print(f"\n[{i}번째 형질]")
+        print("  유전자형별 확률:")
+        for geno, p in sorted(genotype_probs.items()):
+            print(f"    {geno:<10}: {p:.2f}%")
+
+        print("  표현형별 확률:")
+        for pheno, p in sorted(phenotype_probs.items()):
+            print(f"    {pheno:<20}: {p:.2f}%")
+    print()
+
+    # --- 추가: 전체 형질 조합 확률 계산 (유전자형) ---
+    print("\n--- 전체 형질 조합 유전자형 확률 ---")
+
+    all_genotype_prob_lists = []
+    for i, trait in enumerate(traits, start=1):
+        mom_trait_gene = mom_genes[i - 1]
+        dad_trait_gene = dad_genes[i - 1]
+        mom_alleles = list(mom_trait_gene)
+        dad_alleles = list(dad_trait_gene)
+        genotype_probs, _ = cross_phenotype_prob(mom_alleles, dad_alleles, trait)
+        all_genotype_prob_lists.append(genotype_probs)
+
+    genotype_options_per_trait = []
+    for prob_dict in all_genotype_prob_lists:
+        genotype_options_per_trait.append([(g, p / 100) for g, p in prob_dict.items()])
+
+    combined_genotype_probs = defaultdict(float)
+
+    for combination_tuple in product(*genotype_options_per_trait):
+        combined_genotype_str = ""
+        combined_probability = 1.0
+
+        for genotype, prob in combination_tuple:
+            combined_genotype_str += genotype
+            combined_probability *= prob
+
+        combined_genotype_probs[combined_genotype_str] += combined_probability * 100
+
+    if combined_genotype_probs:
+        for geno_combo, prob in sorted(combined_genotype_probs.items()):
+            print(f"  {geno_combo:<15}: {prob:.2f}%")
+    else:
+        print("  계산 가능한 전체 형질 유전자형 조합이 없습니다.")
+
+    # --- 추가: 전체 형질 조합 확률 계산 (표현형) ---
+    print("\n--- 전체 형질 조합 표현형 확률 ---")
+
+    all_phenotype_prob_lists = []
+    for i, trait in enumerate(traits, start=1):
+        mom_trait_gene = mom_genes[i - 1]
+        dad_trait_gene = dad_genes[i - 1]
+        mom_alleles = list(mom_trait_gene)
+        dad_alleles = list(dad_trait_gene)
+        _, phenotype_probs = cross_phenotype_prob(mom_alleles, dad_alleles, trait)
+        all_phenotype_prob_lists.append(phenotype_probs)
+
+    phenotype_options_per_trait = []
+    for prob_dict in all_phenotype_prob_lists:
+        phenotype_options_per_trait.append([(p_name, p / 100) for p_name, p in prob_dict.items()])
+
+    combined_phenotype_probs = defaultdict(float)
+
+    for combination_tuple in product(*phenotype_options_per_trait):
+        combined_phenotype_str = ""
+        combined_probability = 1.0
+
+        phenotype_parts = []
+        for phenotype_name, prob in combination_tuple:
+            phenotype_parts.append(phenotype_name)
+            combined_probability *= prob
+
+        combined_phenotype_str = ", ".join(phenotype_parts)
+
+        combined_phenotype_probs[combined_phenotype_str] += combined_probability * 100
+
+    if combined_phenotype_probs:
+        max_len = max(len(s) for s in combined_phenotype_probs.keys())
+        for pheno_combo, prob in sorted(combined_phenotype_probs.items()):
+            print(f"  {pheno_combo:<{max_len + 2}}: {prob:.2f}%")
+    else:
+        print("  계산 가능한 전체 형질 표현형 조합이 없습니다.")
+    print()
+
+
+# ------------------ [3] 유전병 계산기 함수들 ------------------ #
+
+
+def input_disease_info():
+    # 1. 성염색체 연관 여부 먼저 질문
+    is_sex_linked_str = get_valid_input(
+        "▶ 이 유전병은 성염색체 연관인가요? (y: 성염색체, n: 상염색체): ",
+        lambda x: x.lower() in ['y', 'n'],
+        "y 또는 n으로 입력해주세요."
+    ).lower()
+    is_sex_linked = (is_sex_linked_str == 'y')
+
+    if is_sex_linked:
+        # 2. 성염색체일 경우: X' 또는 Y' 중 선택
+        while True:
+            allele_location = input("▶ 보인자 알렐은 X 염색체에 있나요, Y 염색체에 있나요? (x 또는 y): ").strip().lower()
+            if allele_location == 'x':
+                disease_allele = "X'"
+                break
+            elif allele_location == 'y':
+                disease_allele = "Y'"
+                break
+            else:
+                print("  x 또는 y로 입력해주세요.")
+    else:
+        # 3. 상염색체일 경우: 유전병 알렐 직접 입력
+        disease_allele = get_valid_input(
+            "▶ 유전병 보인자 알렐을 2글자 형식으로 입력하세요 (예: A'): ",
+            lambda x: len(x) == 2 and x[0].isalpha() and x[1] == "'",
+            "예) A' 와 같은 2글자를 입력하세요 (첫 글자는 알파벳, 두 번째 글자는 어포스트로피)."
+        ).upper()
+
+    # 4. 우성/열성 여부는 공통
+    is_dominant_str = get_valid_input(
+        "▶ 보인자 알렐은 우성인가요? 열성인가요? (우성:y, 열성:n): ",
+        lambda x: x.lower() in ['y', 'n'],
+        "y 또는 n으로 입력해주세요."
+    ).lower()
+    is_dominant = (is_dominant_str == 'y')
+
+    return disease_allele, is_dominant, is_sex_linked
+
+
+def input_parent_genotype_disease(is_sex_linked, disease_allele):
+    mom_genotype = ""
+    dad_genotype = ""
+
+    if is_sex_linked:
+        print("\n▶ 부모 유전자형 입력 (여성: XX, XX', X'X', 남성: XY, X'Y, XY') - x염색체에 있는 경우 X'이 보인자이며, y염색체에 있는 경우 Y'이 보인자입니다.")
+
+        # X-연관 유전일 경우 아빠 Y' 입력 제한
+        if disease_allele == "X'":
+            # 엄마 유전자형 입력
+            while True:
+                mom_input = input("  엄마 유전자형 입력 (예: XX, XX', X'X): ").strip().upper()
+                if mom_input in ['XX', "XX'", "X'X'", "X'X"]:
+                    mom_genotype = mom_input
+                    break
+                print("  엄마 유전자형은 XX, XX', X'X' 중 하나여야 합니다.")
+
+            # 아빠 유전자형 입력 (Y' 제외)
+            while True:
+                dad_input = input("  아빠 유전자형 입력 (예: XY, X'Y): ").strip().upper()
+                if dad_input in ['XY', "X'Y"]:
+                    dad_genotype = dad_input
+                    break
+                print("  아빠 유전자형은 XY, X'Y 형식만 가능합니다 (X-연관 유전이므로 XY'는 입력할 수 없습니다).")
+
+        # Y-연관 유전일 경우 엄마 X' 입력 제한
+        elif disease_allele == "Y'":
+            # 엄마 유전자형 입력 (X' 제외)
+            while True:
+                mom_input = input("  엄마 유전자형 입력 (예: XX): ").strip().upper()
+                if mom_input == 'XX':
+                    mom_genotype = mom_input
+                    break
+                print("  엄마 유전자형은 XX여야 합니다 (Y-연관 유전이므로 XX'나 X'X'는 입력할 수 없습니다).")
+
+            # 아빠 유전자형 입력
+            while True:
+                dad_input = input("  아빠 유전자형 입력 (예: XY, XY'): ").strip().upper()
+                if dad_input in ['XY', "XY'"]:
+                    dad_genotype = dad_input
+                    break
+                print("  아빠 유전자형은 XY, XY' 형식만 가능합니다.")
+
+    else:
+        # 상염색체는 기존 코드 그대로
+        print("▶ 부모 유전자형 입력 (상염색체, 예: AA, Aa, A'A')")
+        mom_genotype = get_valid_input(
+            "  엄마 유전자형 입력: ",
+            lambda x: len(x) >= 2 and all(c.isalpha() or c == "'" for c in x),
+            "알파벳 또는 '로 이루어진 유전자형을 입력하세요 (최소 2글자)."
+        ).upper()
+        dad_genotype = get_valid_input(
+            "  아빠 유전자형 입력: ",
+            lambda x: len(x) >= 2 and all(c.isalpha() or c == "'" for c in x),
+            "알파벳 또는 '로 이루어진 유전자형을 입력하세요 (최소 2글자)."
+        ).upper()
+
+    return mom_genotype, dad_genotype
+
+
+def extract_alleles_autosomal(genotype, disease_allele):
+    """상염색체 유전자형에서 대립유전자를 추출합니다."""
+    alleles = []
+    i = 0
+    while i < len(genotype):
+        # 먼저 disease_allele과 일치하는지 확인 (예: A')
+        if i + len(disease_allele) <= len(genotype) and genotype[i:i + len(disease_allele)] == disease_allele:
+            alleles.append(disease_allele)
+            i += len(disease_allele)
+        # 그 다음 단일 알파벳 대립유전자 확인 (예: A)
+        elif i + 1 <= len(genotype) and genotype[i].isalpha():
+            alleles.append(genotype[i])
+            i += 1
+        else:  # 예상치 못한 문자 (예: 유효하지 않은 특수문자)
+            i += 1  # 건너뛰기
+    return alleles
+
+
+def classify_sex_linked(genotype_str, disease_allele, is_dominant, sex): #성염색체 연관 유전병을 보인자 알렐 기준으로 정확히 분류
+    count = genotype_str.count(disease_allele)
+
+    if is_dominant:
+        return "환자" if count >= 1 else "정상"
+    else:
+        if sex == 'F':
+            if disease_allele == "X'":
+                if count == 2:
+                    return "환자"
+                elif count == 1:
+                    return "보인자"
+                else:
+                    return "정상"
+            else:
+                # Y'는 여성에게 없음 → 무조건 정상
+                return "정상"
+        else:  # 남성
+            return "환자" if count >= 1 else "정상"
+
+
+def classify_autosomal(genotype, disease_allele, is_dominant): #상염색체 연관 유전병 표현형 분류
+    # disease_allele이 'A''처럼 두 글자일 경우를 대비하여 count 대신 직접 파싱
+    num_disease_alleles = 0
+    i = 0
+    while i < len(genotype):
+        if i + len(disease_allele) <= len(genotype) and genotype[i:i + len(disease_allele)] == disease_allele:
+            num_disease_alleles += 1
+            i += len(disease_allele)
+        else:
+            i += 1  # 일반 알파벳이나 다른 문자
+
+    if is_dominant:
+        return "환자" if num_disease_alleles >= 1 else "정상"
+    else:  # 열성
+        if num_disease_alleles == 2:  # A'A'
+            return "환자"
+        elif num_disease_alleles == 1:  # AA'
+            return "보인자"
+        else:  # AA
+            return "정상"
+
+
+def calculate_offspring_disease_autosomal(mom_genotype, dad_genotype, disease_allele): #상염색체 유전병의 자손 유전자형 및 확률 계산
+    mom_alleles = extract_alleles_autosomal(mom_genotype, disease_allele)
+    dad_alleles = extract_alleles_autosomal(dad_genotype, disease_allele)
+
+    offspring_genotypes = Counter()
+    for m_allele in mom_alleles:
+        for d_allele in dad_alleles:
+            # 대립유전자 조합 후 정렬하여 유전자형 생성
+            offspring_geno = ''.join(sorted([m_allele, d_allele]))
+            offspring_genotypes[offspring_geno] += 1
+
+    total_offspring_combinations = len(mom_alleles) * len(dad_alleles)
+    result_probs = {
+        geno: (count / total_offspring_combinations) * 100
+        for geno, count in offspring_genotypes.items()
+    }
+    return result_probs
+
+
+def calculate_offspring_disease_sex_linked(mom_genotype, dad_genotype, disease_allele):
+    offspring_results = defaultdict(float)
+
+    # 엄마 X 염색체 2개 추출
+    if mom_genotype == "XX":
+        mom_x_chromosomes = ['X', 'X']
+    elif mom_genotype == "XX'":
+        mom_x_chromosomes = ['X', "X'"]
+    elif mom_genotype == "X'X'":
+        mom_x_chromosomes = ["X'", "X'"]
+    elif mom_genotype == "X'X":  # 'X'X'와 동일하게 처리
+        mom_x_chromosomes = ["X'", "X"]  # 정렬해서 저장
+    else:
+        mom_x_chromosomes = []
+
+    # 아빠 성염색체 추출
+    dad_x = None
+    dad_y = None
+
+    if dad_genotype == "XY":
+        dad_x = "X"
+        dad_y = "Y"
+    elif dad_genotype == "X'Y":
+        dad_x = "X'"
+        dad_y = "Y"
+    elif dad_genotype == "XY'":
+        dad_x = "X"
+        dad_y = "Y'"
+    else:
+        print(" 잘못된 아빠 유전자형입니다.")
+
+    # 자손 생성
+    for mom_x in mom_x_chromosomes:
+        for dad_ch in [dad_x, dad_y]:
+            if dad_ch is None:  # 아빠 유전자형이 잘못된 경우 스킵
+                continue
+
+            if dad_ch.startswith("X"):
+                # 딸: 엄마 X + 아빠 X
+                alleles = sorted([mom_x, dad_ch])
+                genotype = ''.join(alleles)
+                offspring_results[('F', genotype)] += 1
+            elif dad_ch.startswith("Y"):
+                # 아들: 엄마 X + 아빠 Y
+                genotype = mom_x + dad_ch
+                offspring_results[('M', genotype)] += 1
+
+    total = len(mom_x_chromosomes) * 2  # dad_x, dad_y 둘 다 사용됨
+    if total == 0:  # 부모 유전자형이 유효하지 않아 total이 0이 되는 경우 방지
+        return {}
+
+    final_results = {
+        (sex, geno): (count / total) * 100
+        for (sex, geno), count in offspring_results.items()
+    }
+    return final_results
+
+
+def disease_main():
+    print("\n--- 유전병 확률 계산기 ---")
+    disease_allele, is_dominant, is_sex_linked = input_disease_info()
+    mom_genotype, dad_genotype = input_parent_genotype_disease(is_sex_linked, disease_allele)
+
+    print("\n--- 자손 유전자형 및 환자/보인자/정상 확률 ---")
+    if is_sex_linked:
+        offspring_probs = calculate_offspring_disease_sex_linked(mom_genotype, dad_genotype, disease_allele)
+        status_counts = defaultdict(float)
+        female_patient_prob = 0.0
+        male_patient_prob = 0.0
+        total_females = 0.0
+        total_males = 0.0
+
+        if not offspring_probs:
+            print("계산 가능한 자손 조합이 없습니다. 부모 유전자형을 확인해주세요.")
+            return
+
+        for (sex, geno), prob in offspring_probs.items():
+            status = classify_sex_linked(geno, disease_allele, is_dominant, sex)
+            print(f"  {sex} 자식 {geno}: {prob:.2f}% → {status}")
+            status_counts[status] += prob
+
+            if sex == 'F':
+                total_females += prob
+                if status == "환자":
+                    female_patient_prob += prob
+            elif sex == 'M':
+                total_males += prob
+                if status == "환자":
+                    male_patient_prob += prob
+
+        print("\n--- 총 확률 ---")
+        total_prob_sum = sum(status_counts.values())
+        if total_prob_sum > 0:
+            for k, v in status_counts.items():
+                print(f"  {k}: {(v / total_prob_sum) * 100:.2f}%")
+        else:
+            print("계산된 확률이 없습니다.")
+
+        # 성별에 따른 환자 확률 출력
+        print("\n--- 성별에 따른 환자 확률 ---")
+        if total_females > 0:
+            print(f"  여자 자녀 중 환자일 확률: {(female_patient_prob / total_females) * 100:.2f}%")
+        else:
+            print("  여자 자녀가 태어날 확률이 없습니다.")
+
+        if total_males > 0:
+            print(f"  남자 자녀 중 환자일 확률: {(male_patient_prob / total_males) * 100:.2f}%")
+        else:
+            print("  남자 자녀가 태어날 확률이 없습니다.")
+
+
+    else:  # 상염색체
+        offspring_probs = calculate_offspring_disease_autosomal(mom_genotype, dad_genotype, disease_allele)
+        status_counts = defaultdict(float)
+
+        if not offspring_probs:
+            print("계산 가능한 자손 조합이 없습니다. 부모 유전자형을 확인해주세요.")
+            return
+
+        for geno, prob in offspring_probs.items():
+            status = classify_autosomal(geno, disease_allele, is_dominant)  # This was the missing function call
+            print(f"  {geno}: {prob:.2f}% → {status}")
+            status_counts[status] += prob
+
+        print("\n--- 총 확률 ---")
+        total_prob_sum = sum(status_counts.values())
+        if total_prob_sum > 0:
+            for k, v in status_counts.items():
+                print(f"  {k}: {(v / total_prob_sum) * 100:.2f}%")
+        else:
+            print("계산된 확률이 없습니다.")
+    print()
+
+
+# ------------------ [4] 설명 페이지 ------------------ #
+def show_explanation_page():
+    print("\n--- 유전 및 유전병 설명 ---")
+    print("\n## 1. 유전의 기본 원리")
+    print("유전은 부모의 형질이 자손에게 전달되는 현상을 말한다. 여기서 '형질'은 눈 색깔, 혈액형 등 생물이 가진 특징을 의미한다. 이러한 형질을 결정하는 것이 바로 '유전자'이다.")
+    print("\n### 대립유전자와 표현형")
+    print("""  - 대립유전자 : 한 형질을 결정하는 여러 유전자 형태를 말한다. 
+               예를 들어 혈액형 A, B, O가 대립유전자이다.""")
+    print("""  - 표현형 : 유전자형이 겉으로 드러나는 모습이나 특성을 말한다. 
+               예를 들어 혈액형 A형, B형 등이 표현형이다.""")
+    print("\n### 우열 관계의 종류")
+    print("  - 완전 우성 (Complete Dominance) :")
+    print("""    두 대립유전자 중 하나(우성)가 다른 하나(열성)의 발현을 완전히 억제하여 우성 형질만 나타나는 경우이다. 
+    예를 들어 둥근 완두콩(R)과 주름진 완두콩(r)이 만나면, Rr 유전자형일 때 둥근 완두콩 표현형이 나타난다.""")
+    print("  - 불완전 우성 (Incomplete Dominance):")
+    print("""    두 대립유전자의 중간 형질이 나타나는 경우이다.
+    예를 들어 붉은 꽃(RR)과 흰 꽃(WW)이 만나면, RW 유전자형일 때 분홍색 꽃이 나타난다. 
+    항상 두 대립유전자에서만 나타나는 것은 아니지만 대부분 두 대립유전자에서만 나타나기 때문에 이 프로그램에서는 두 대립유전자사이의 경우만 생각한다.""")
+    print("  - 공우성 (Co-dominance / 복대립 유전):")
+    print("""    두 대립유전자가 모두 동등하게 발현되어 두 가지 형질이 동시에 나타나는 경우이다. "
+    예를 들어 ABO 혈액형에서 A 대립유전자와 B 대립유전자가 만나면, AB형이라는 새로운 표현형이 나타나는데, 이는 A와 B 형질이 모두 발현된 것이다.""")
+
+    print("\n## 2. 유전병의 종류")
+    print("유전병은 특정 유전자의 이상으로 인해 발생하는 질병을 말한다.")
+    print("\n### 상염색체 유전병")
+    print("  - 성염색체를 제외한 나머지 염색체(상염색체)에 존재하는 유전자 이상으로 인해 발생한다. 남녀 모두에게 동일한 확률로 나타난다.")
+    print("  - 우성 유전 : 하나의 이상 유전자만 있어도 질병이 발현된다. 예시: 헌팅턴병")
+    print("  - 열성 유전 : 두 개의 이상 유전자가 모두 있을 때만 질병이 발현된다. 예시: 낭포성 섬유증, 겸상 적혈구 빈혈증")
+
+    print("\n### 성염색체 유전병 (X-연관 유전, Y-연관 유전)")
+    print("  - 성별을 결정하는 X 또는 Y 염색체에 존재하는 유전자 이상으로 인해 발생한다.")
+    print("  - X-연관 유전 : X 염색체에 이상 유전자가 있을 때 발생한다. 남성은 X 염색체가 하나뿐이므로 여성보다 더 큰 영향을 받기 쉽다.")
+    print("    - X-연관 우성 : 예시: 비타민 D 저항성 구루병")
+    print("    - X-연관 열성 : 예시: 적록색맹, 혈우병")
+    print("  - Y-연관 유전 : Y 염색체에 이상 유전자가 있을 때 발생한다. Y 염색체는 남성에게만 있으므로 남성에게만 나타난다.")
+    print("    - 예시: 일부 불임 유전")
+
+    input("\n메인 메뉴로 돌아가려면 enter를 누르세요")
+    main()
+
+
+# ------------------ [5] 메인 통합 ------------------ #
+def main():
+    while True:
+        print("\n--- 유전 계산기 메인 메뉴 ---")
+        print("1. 표현형 확률 계산기")
+        print("2. 유전병 확률 계산기")
+        print("3. 유전 및 유전병 설명")  # 새로운 메뉴 추가
+        print("4. 종료")  # 종료 번호 변경
+        choice = get_valid_input(
+            "선택: ",
+            lambda x: x in ['1', '2', '3', '4'],  # 유효한 입력 범위 변경
+            "1, 2, 3, 4 중 하나를 입력해주세요."
+        )
+
+        if choice == '1':
+            phenotype_main()
+        elif choice == '2':
+            disease_main()
+        elif choice == '3':
+            show_explanation_page()
+        elif choice == '4':
+            print("프로그램을 종료합니다.")
+            break
+
+
+if __name__ == "__main__":
+    main()
+
